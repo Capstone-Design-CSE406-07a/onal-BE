@@ -1,0 +1,29 @@
+{
+  "name": "onal-be",
+  "version": "1.0.0",
+  "description": "공공데이터 api를 이용한 날씨가이드 서비스 - 서버 구축",
+  "homepage": "https://github.com/Capstone-Design-CSE406-07a/onal-BE#readme",
+  "bugs": {
+    "url": "https://github.com/Capstone-Design-CSE406-07a/onal-BE/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Capstone-Design-CSE406-07a/onal-BE.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mongoose": "^9.4.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "tsx": "^4.21.0"
+  }
+}
