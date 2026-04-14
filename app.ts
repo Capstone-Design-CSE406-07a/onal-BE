@@ -17,7 +17,7 @@ MongoDBConnect();
 app.use('/user', Information_Router);
 
 app.get('/', (req: Request, res: Response) => {
-    res.send("완료");
+    res.send("테스트");
 });
 
 // 4. app.listen 수정 (인자 없이 콜백만)

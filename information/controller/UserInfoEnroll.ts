@@ -12,7 +12,7 @@ import User from '../interface/User';
 //         });
 
 
-export const UserInfoSend = async (req: Request, res: Response) => {
+export const UserInfoEnroll = async (req: Request, res: Response) => {
     try {
         const newUser = await User.create(req.body);
         res.status(201).json(newUser);

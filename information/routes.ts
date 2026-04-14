@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { UserInfoSend} from './controller/UserInfoSend';
+import { UserInfoEnroll} from './controller/UserInfoEnroll';
 
 const router = Router();
 
-router.use('/userinfosend', UserInfoSend);
+router.use('/userinfoenroll', UserInfoEnroll);
 
 export default router
