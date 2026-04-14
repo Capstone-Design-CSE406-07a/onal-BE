@@ -5,6 +5,6 @@ import { UserInfoGet } from './controller/UserInfoGet';
 const router = Router();
 
 router.post('/enroll', UserInfoEnroll);
-router.get('/get/:id', UserInfoGet);
+router.get('/get', UserInfoGet);
 
 export default router
