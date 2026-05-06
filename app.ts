@@ -2,10 +2,10 @@ import express, { Request, Response } from 'express'; // import 방식 통일
 import Information_Router from './information/routes';
 import Oauth_Router from'./google/routes';
 import Weather_Router from './get_weather_data/routes'
+import AI_Agent_Router from './AI-Agent/routes';
 import { MongoDBConnect } from './MongoDB/MongoDBConnect';
 import passport from './config/Passport';
 import session from 'express-session';
-
 
 const app = express();
 const port = 3000;
@@ -29,6 +29,7 @@ MongoDBConnect();
 app.use('/user', Information_Router);
 app.use('/oauth',Oauth_Router)
 app.use('/getdata',Weather_Router)
+app.use('/ai-agent', AI_Agent_Router)
 
 app.get('/', (req: Request, res: Response) => {
     res.send("테스트");
