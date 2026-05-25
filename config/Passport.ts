@@ -14,7 +14,7 @@ passport.use(
       (async () => {
         try {
           // 1. 구글 ID로 이미 가입된 회원인지 확인
-          let user = await User.findOne({ id: profile.id });
+          let user = await User.findOne({ googleId: profile.id });
           // 2. 가입된 회원이 없으면 새로 생성
           if (!user) {
             return done(null, false, { message: 'USER_NOT_FOUND' })

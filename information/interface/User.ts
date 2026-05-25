@@ -1,29 +1,47 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-// 1. 인터페이스 정의 (TypeScript용)
-export interface IUser extends Document {
-  id: string;
-  password: string;
-  name: string;
-  onboarding: boolean;
-  sensivity: string;
-  activity_time: string;
-  favorite_place: string[];
+export interface IActivityTime {
+  type: string;   // 예: 출근, 퇴근, 운동, 산책
+  time: string;   // 예: 06:00
 }
 
-// 2. 스키마 정의 (MongoDB/Mongoose용)
-const UserSchema: Schema = new Schema({
-  id: { type: String, required: true, unique: true }, // unique: true는 id 중복 방지
-  password: { type: String, required: true },
+export interface IFavoritePlace {
+  name: string;   // 장소명 (예: 회사, 학교)
+  dong: string;   // 동 이름 (예: 반포동)
+  icon: string;   // 집 | 직장 | 학교 | 병원 | 카페
+}
+
+export interface IUser extends Document {
+  googleId: string;
+  name: string;
+  email: string;
+  onboarding: boolean;
+  sensivity: string[];              // 민감군 복수 선택: 일반 | 천식/호흡기 | 영유아동반 | 노인
+  activity_time: IActivityTime[];   // 활동 시간대 (최대 5개)
+  favorite_place: IFavoritePlace[]; // 관심 장소 (최대 5개)
+}
+
+const ActivityTimeSchema = new Schema<IActivityTime>({
+  type: { type: String, required: true },
+  time: { type: String, required: true },
+}, { _id: false });
+
+const FavoritePlaceSchema = new Schema<IFavoritePlace>({
   name: { type: String, required: true },
-  onboarding: { type: Boolean, default: false },
-  sensivity: { type: String },
-  activity_time: { type: String },
-  favorite_place: { type: [String] }
+  dong: { type: String, required: true },
+  icon: { type: String, enum: ['집', '직장', '학교', '병원', '카페'], required: true },
+}, { _id: false });
+
+const UserSchema: Schema = new Schema({
+  googleId:       { type: String, required: true, unique: true },
+  name:           { type: String, required: true },
+  email:          { type: String, required: true },
+  onboarding:     { type: Boolean, default: false },
+  sensivity:      { type: [String], default: [] },
+  activity_time:  { type: [ActivityTimeSchema], validate: [(v: IActivityTime[]) => v.length <= 5, '최대 5개'] },
+  favorite_place: { type: [FavoritePlaceSchema], validate: [(v: IFavoritePlace[]) => v.length <= 5, '최대 5개'] },
 });
 
-// 3. 모델 생성 및 내보내기
-// 이미 컬렉션이 있다면 세 번째 인자로 컬렉션 이름을 적어주세요. (예: 'User')
 const User: Model<IUser> = mongoose.model<IUser>('User', UserSchema, 'User');
 
 export default User;

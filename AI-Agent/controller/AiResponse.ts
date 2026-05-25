@@ -10,14 +10,14 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/
 
 export async function AiResponse(req: Request, res: Response): Promise<void> {
   try {
-    const { id, prompt, lat, lng } = req.body;
+    const { googleId, prompt, lat, lng } = req.body;
 
-    if (!id || !prompt) {
-      res.status(400).json({ error: 'id와 prompt는 필수입니다.' });
+    if (!googleId || !prompt) {
+      res.status(400).json({ error: 'googleId와 prompt는 필수입니다.' });
       return;
     }
 
-    const user = await User.findOne({ id});
+    const user = await User.findOne({ googleId });
     if (!user) {
       res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
       return;

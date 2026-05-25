@@ -1,22 +1,34 @@
 import { Request, Response } from 'express';
 import User from '../interface/User';
 
-const dummy = {
-            id: 'user1',
-            password: '123',
-            name: '홍길동',
-            onboarding: false,
-            sensivity: 'high',
-            activity_time: 'evening',
-            favorite_place: ['강남', '역삼']
-        };
-
-
 export const UserInfoEnroll = async (req: Request, res: Response) => {
     try {
-        const newUser = await User.create(dummy);
-        res.status(201).json(newUser);
-    } catch (error) {
-        res.status(500).json({ message: "서버 에러" });
+        const profile = req.user as any;
+        if (!profile) {
+            return res.status(401).json({ message: '로그인이 필요합니다.' });
+        }
+
+        const googleId = profile.id;
+        const name     = profile.displayName;
+        const email    = profile.emails?.[0]?.value ?? '';
+
+        const { sensivity, activity_time, favorite_place } = req.body;
+
+        const newUser = await User.create({
+            googleId,
+            name,
+            email,
+            onboarding:     true,
+            sensivity:      sensivity      ?? [],
+            activity_time:  activity_time  ?? [],
+            favorite_place: favorite_place ?? [],
+        });
+
+        return res.status(201).json(newUser);
+    } catch (error: any) {
+        if (error.code === 11000) {
+            return res.status(409).json({ message: '이미 가입된 계정입니다.' });
+        }
+        return res.status(500).json({ message: '서버 에러' });
     }
 };
