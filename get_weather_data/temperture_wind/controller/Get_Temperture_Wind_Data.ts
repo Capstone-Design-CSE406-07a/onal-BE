@@ -2,6 +2,7 @@ import axios, { AxiosResponse } from 'axios';
 import { Request, Response } from 'express';
 import { getBaseTime } from '../utils/getBaseTime';
 import { convertLatLngToNxNy } from '../utils/convertLatLngToNxNy';
+import { mappingData } from '../../Kma_Area_mapping';
 
 interface WeatherItem {
   category: string;
@@ -60,4 +61,43 @@ export async function getWeather(nx: number, ny: number, apiKey: string): Promis
     if (meta) acc[meta.name] = `${item.obsrValue}${meta.unit}`;
     return acc;
   }, {}) as WeatherResult;
+}
+
+export async function Get_Temperture_Wind_Nationwide(_req: Request, res: Response): Promise<void> {
+  const apiKey = process.env.WEATHER_API_KEY!;
+  const results = await getWeatherNationwide(apiKey);
+  res.json(results);
+}
+
+export async function getWeatherNationwide(apiKey: string): Promise<(WeatherResult & { sido: string; sigungu: string; dong: string })[]> {
+  // (nx, ny) 격자 기준 중복 제거 — 같은 격자를 공유하는 동은 동일한 날씨 데이터 사용
+  const nxNyMap = new Map<string, typeof mappingData[number][]>();
+  mappingData.forEach(rep => {
+    const key = `${rep.nx},${rep.ny}`;
+    if (!nxNyMap.has(key)) nxNyMap.set(key, []);
+    nxNyMap.get(key)!.push(rep);
+  });
+
+  const uniqueEntries = [...nxNyMap.values()].map(group => group[0]);
+
+  const weatherResults = await Promise.allSettled(
+    uniqueEntries.map(async (rep) => {
+      const data = await getWeather(rep.nx, rep.ny, apiKey);
+      return { key: `${rep.nx},${rep.ny}`, data };
+    })
+  );
+
+  const weatherMap = new Map<string, WeatherResult>();
+  weatherResults
+    .filter((r): r is PromiseFulfilledResult<{ key: string; data: WeatherResult }> => r.status === 'fulfilled')
+    .forEach(r => weatherMap.set(r.value.key, r.value.data));
+
+  return mappingData
+    .filter(rep => weatherMap.has(`${rep.nx},${rep.ny}`))
+    .map(rep => ({
+      sido: rep.sido,
+      sigungu: rep.sigungu,
+      dong: rep.dong,
+      ...weatherMap.get(`${rep.nx},${rep.ny}`)!,
+    }));
 }
