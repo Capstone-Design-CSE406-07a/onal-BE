@@ -4,12 +4,19 @@ import proj4 from 'proj4';
 import { Request, Response } from 'express';
 import { convertLatLngToTM } from '../utils/convertLatLngToTM';
 import { getNearestStation } from '../utils/getNearestStation';
+import { mappingData } from '../../Kma_Area_mapping';
 
 interface AirQualityResult {
   미세먼지: string;   // PM10
   초미세먼지: string; // PM2.5
   통합대기환경지수: string;
   측정시간: string;
+}
+
+interface AirQualityNationwideResult extends AirQualityResult {
+  sido: string;
+  sigungu: string;
+  dong: string;
 }
 
 proj4.defs("EPSG:5181", "+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs");
@@ -47,4 +54,60 @@ export async function getAirQuality(lat: number, lng:number, apiKey: string): Pr
     통합대기환경지수: item.khaiGrade, // 1:좋음 2:보통 3:나쁨 4:매우나쁨
     측정시간: item.dataTime,
   };
+}
+
+export async function Get_Pm_Nationwide(_req: Request, res: Response): Promise<void> {
+  const apiKey = process.env.WEATHER_API_KEY!;
+  const results = await getAirQualityNationwide(apiKey);
+  res.json(results);
+}
+
+export async function getAirQualityNationwide(apiKey: string): Promise<AirQualityNationwideResult[]> {
+  // Phase 1: 모든 동의 가장 가까운 측정소를 병렬로 조회
+  const stationLookups = await Promise.allSettled(
+    mappingData.map(async (rep) => {
+      const [tmX, tmY] = proj4(wgs84, tmKorea, [rep.lon, rep.lat]);
+      const stationName = await getNearestStation(tmX, tmY, apiKey);
+      return { sido: rep.sido, sigungu: rep.sigungu, dong: rep.dong, stationName };
+    })
+  );
+
+  const dongStations = stationLookups
+    .filter((r): r is PromiseFulfilledResult<{ sido: string; sigungu: string; dong: string; stationName: string }> => r.status === 'fulfilled')
+    .map(r => r.value);
+
+  // Phase 2: 중복 측정소 제거 후 데이터 조회
+  const uniqueStations = [...new Set(dongStations.map(d => d.stationName))];
+  const stationDataResults = await Promise.allSettled(
+    uniqueStations.map(async (stationName) => {
+      const url = `http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?serviceKey=${apiKey}&returnType=json&numOfRows=1&pageNo=1&stationName=${encodeURIComponent(stationName)}&dataTerm=DAILY&ver=1.0`;
+      const axiosRes = await axios.get(url);
+      const item = axiosRes.data.response.body.items[0];
+      return {
+        stationName,
+        미세먼지: `${item.pm10Value}㎍/㎥`,
+        초미세먼지: `${item.pm25Value}㎍/㎥`,
+        통합대기환경지수: item.khaiGrade,
+        측정시간: item.dataTime,
+      };
+    })
+  );
+
+  const stationDataMap = new Map<string, AirQualityResult>();
+  stationDataResults
+    .filter((r): r is PromiseFulfilledResult<{ stationName: string } & AirQualityResult> => r.status === 'fulfilled')
+    .forEach(r => {
+      const { stationName, ...data } = r.value;
+      stationDataMap.set(stationName, data);
+    });
+
+  // Phase 3: 각 동에 측정소 데이터 매핑
+  return dongStations
+    .filter(d => stationDataMap.has(d.stationName))
+    .map(d => ({
+      sido: d.sido,
+      sigungu: d.sigungu,
+      dong: d.dong,
+      ...stationDataMap.get(d.stationName)!,
+    }));
 }

@@ -3,8 +3,9 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import { findNearestRegion } from '../utils/findNearestRegion';
 import { findNearestUVIndex } from '../utils/findNearestUVIndex';
+import { mappingData } from '../../Kma_Area_mapping';
 
-export async function Get_UV_Data(req: Request, res: Response) {
+export async function Get_UV_Data(_req: Request, res: Response) {
 
 
   try {
@@ -25,7 +26,6 @@ export async function getUvIndex() {
   const time = getBaseTime(new Date());
   const location = findNearestRegion(37.2636,127.0286);
   console.log(location)
-  const areaNo = 1
   const { data } = await axios.get(BASE_URL, {
     params: {
       serviceKey: process.env.WEATHER_API_KEY!,
@@ -50,4 +50,60 @@ function getBaseTime(date: Date): string {
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
   return `${yyyy}${mm}${dd}06`;
+}
+
+export async function getUvIndexForLocation(lat: number, lon: number): Promise<number> {
+  const time = getBaseTime(new Date());
+  const location = findNearestRegion(lat, lon);
+  const { data } = await axios.get(BASE_URL, {
+    params: {
+      serviceKey: process.env.WEATHER_API_KEY!,
+      numOfRows: 10,
+      pageNo: 1,
+      dataType: 'JSON',
+      areaNo: location.areaNo,
+      time,
+    },
+  });
+
+  const items = data?.response?.body?.items?.item;
+  if (!items) throw new Error('데이터 없음');
+
+  return findNearestUVIndex(items);
+}
+
+export async function Get_UV_Nationwide(_req: Request, res: Response) {
+  try {
+    const results = await getUvIndexNationwide();
+    return res.status(200).json(results);
+  } catch (e) {
+    return res.status(500).json({ message: '전국 자외선 API 호출 실패' });
+  }
+}
+
+export async function getUvIndexNationwide(): Promise<{ sido: string; sigungu: string; dong: string; uv: number }[]> {
+  const time = getBaseTime(new Date());
+
+  const settled = await Promise.allSettled(
+    mappingData.map(async (rep) => {
+      const { data } = await axios.get(BASE_URL, {
+        params: {
+          serviceKey: process.env.WEATHER_API_KEY!,
+          numOfRows: 10,
+          pageNo: 1,
+          dataType: 'JSON',
+          areaNo: rep.areaNo,
+          time,
+        },
+      });
+      const items = data?.response?.body?.items?.item;
+      if (!items) throw new Error('데이터 없음');
+      const uv = findNearestUVIndex(items);
+      return { sido: rep.sido, sigungu: rep.sigungu, dong: rep.dong, uv };
+    })
+  );
+
+  return settled
+    .filter((r): r is PromiseFulfilledResult<{ sido: string; sigungu: string; dong: string; uv: number }> => r.status === 'fulfilled')
+    .map(r => r.value);
 }
