@@ -110,14 +110,15 @@ export async function getUvIndexNationwide(): Promise<{ sido: string; sigungu: s
 }
 
 export async function Get_UV_Nearby(req: Request, res: Response) {
-  const { areaNo, radius } = req.query;
-  if (!areaNo) {
-    return res.status(400).json({ error: 'areaNo는 필수입니다.' });
+  const { dong } = req.query;
+  if (!dong) {
+    return res.status(400).json({ error: 'dong은 필수입니다.' });
   }
-  const results = await getUvIndexNearby(String(areaNo), Number(radius) || 20);
-  if (!results) {
-    return res.status(404).json({ error: '해당 areaNo를 찾을 수 없습니다.' });
+  const region = mappingData.find(r => r.dong === String(dong));
+  if (!region) {
+    return res.status(404).json({ error: '해당 동을 찾을 수 없습니다.' });
   }
+  const results = await getUvIndexNearby(region.areaNo, 5);
   return res.json(results);
 }
 
