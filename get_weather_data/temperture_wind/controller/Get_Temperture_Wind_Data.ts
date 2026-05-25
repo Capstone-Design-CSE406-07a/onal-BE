@@ -100,17 +100,18 @@ export async function getWeatherNationwide(apiKey: string): Promise<(WeatherResu
 }
 
 export async function Get_Temperture_Wind_Nearby(req: Request, res: Response): Promise<void> {
-  const { areaNo, radius } = req.query;
-  if (!areaNo) {
-    res.status(400).json({ error: 'areaNo는 필수입니다.' });
+  const { dong } = req.query;
+  if (!dong) {
+    res.status(400).json({ error: 'dong은 필수입니다.' });
+    return;
+  }
+  const region = mappingData.find(r => r.dong === String(dong));
+  if (!region) {
+    res.status(404).json({ error: '해당 동을 찾을 수 없습니다.' });
     return;
   }
   const apiKey = process.env.WEATHER_API_KEY!;
-  const results = await getWeatherNearby(String(areaNo), Number(radius) || 20, apiKey);
-  if (!results) {
-    res.status(404).json({ error: '해당 areaNo를 찾을 수 없습니다.' });
-    return;
-  }
+  const results = await getWeatherNearby(region.areaNo, 5, apiKey);
   res.json(results);
 }
 
