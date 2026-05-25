@@ -24,6 +24,7 @@
     "express-session": "^1.19.0",
     "groq-sdk": "^1.1.2",
     "mongoose": "^9.4.1",
+    "openai": "^6.39.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "proj4": "^2.20.8",

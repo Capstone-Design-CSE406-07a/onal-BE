@@ -1,4 +1,7 @@
-import express, { Request, Response } from 'express'; // import 방식 통일
+import dotenv from 'dotenv';
+dotenv.config();
+
+import express, { Request, Response } from 'express';
 import Information_Router from './information/routes';
 import Oauth_Router from'./google/routes';
 import Weather_Router from './get_weather_data/routes'
@@ -19,7 +22,7 @@ app.use(session({
     cookie: { secure: false } // 개발 단계에서는 false, 배포(HTTPS) 시에는 true 권장
 }));
 app.use(passport.initialize());
-
+app.use(passport.session());
 
 // 2. DB 연결
 MongoDBConnect();
