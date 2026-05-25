@@ -5,6 +5,7 @@ import { Request, Response } from 'express';
 import { convertLatLngToTM } from '../utils/convertLatLngToTM';
 import { getNearestStation } from '../utils/getNearestStation';
 import { mappingData } from '../../Kma_Area_mapping';
+import { distanceKm } from '../../utils/distanceKm';
 
 interface AirQualityResult {
   미세먼지: string;   // PM10
@@ -108,6 +109,78 @@ export async function getAirQualityNationwide(apiKey: string): Promise<AirQualit
       sido: d.sido,
       sigungu: d.sigungu,
       dong: d.dong,
+      ...stationDataMap.get(d.stationName)!,
+    }));
+}
+
+export async function Get_Pm_Nearby(req: Request, res: Response): Promise<void> {
+  const { areaNo, radius } = req.query;
+  if (!areaNo) {
+    res.status(400).json({ error: 'areaNo는 필수입니다.' });
+    return;
+  }
+  const apiKey = process.env.WEATHER_API_KEY!;
+  const results = await getAirQualityNearby(String(areaNo), Number(radius) || 20, apiKey);
+  if (!results) {
+    res.status(404).json({ error: '해당 areaNo를 찾을 수 없습니다.' });
+    return;
+  }
+  res.json(results);
+}
+
+export async function getAirQualityNearby(areaNo: string, radiusKm: number, apiKey: string): Promise<(AirQualityNationwideResult & { areaNo: string; distance: number })[] | null> {
+  const center = mappingData.find(r => r.areaNo === areaNo);
+  if (!center) return null;
+
+  const nearby = mappingData
+    .map(r => ({ ...r, distance: distanceKm(center.lat, center.lon, r.lat, r.lon) }))
+    .filter(r => r.distance <= radiusKm)
+    .sort((a, b) => a.distance - b.distance);
+
+  const stationLookups = await Promise.allSettled(
+    nearby.map(async r => {
+      const [tmX, tmY] = proj4(wgs84, tmKorea, [r.lon, r.lat]);
+      const stationName = await getNearestStation(tmX, tmY, apiKey);
+      return { areaNo: r.areaNo, sido: r.sido, sigungu: r.sigungu, dong: r.dong, distance: r.distance, stationName };
+    })
+  );
+
+  const dongStations = stationLookups
+    .filter((r): r is PromiseFulfilledResult<{ areaNo: string; sido: string; sigungu: string; dong: string; distance: number; stationName: string }> => r.status === 'fulfilled')
+    .map(r => r.value);
+
+  const uniqueStations = [...new Set(dongStations.map(d => d.stationName))];
+  const stationDataResults = await Promise.allSettled(
+    uniqueStations.map(async stationName => {
+      const url = `http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?serviceKey=${apiKey}&returnType=json&numOfRows=1&pageNo=1&stationName=${encodeURIComponent(stationName)}&dataTerm=DAILY&ver=1.0`;
+      const axiosRes = await axios.get(url);
+      const item = axiosRes.data.response.body.items[0];
+      return {
+        stationName,
+        미세먼지: `${item.pm10Value}㎍/㎥`,
+        초미세먼지: `${item.pm25Value}㎍/㎥`,
+        통합대기환경지수: item.khaiGrade,
+        측정시간: item.dataTime,
+      };
+    })
+  );
+
+  const stationDataMap = new Map<string, AirQualityResult>();
+  stationDataResults
+    .filter((r): r is PromiseFulfilledResult<{ stationName: string } & AirQualityResult> => r.status === 'fulfilled')
+    .forEach(r => {
+      const { stationName, ...data } = r.value;
+      stationDataMap.set(stationName, data);
+    });
+
+  return dongStations
+    .filter(d => stationDataMap.has(d.stationName))
+    .map(d => ({
+      sido: d.sido,
+      sigungu: d.sigungu,
+      dong: d.dong,
+      areaNo: d.areaNo,
+      distance: Math.round(d.distance * 10) / 10,
       ...stationDataMap.get(d.stationName)!,
     }));
 }

@@ -4,6 +4,7 @@ import axios from 'axios';
 import { findNearestRegion } from '../utils/findNearestRegion';
 import { findNearestUVIndex } from '../utils/findNearestUVIndex';
 import { mappingData } from '../../Kma_Area_mapping';
+import { distanceKm } from '../../utils/distanceKm';
 
 export async function Get_UV_Data(_req: Request, res: Response) {
 
@@ -105,5 +106,51 @@ export async function getUvIndexNationwide(): Promise<{ sido: string; sigungu: s
 
   return settled
     .filter((r): r is PromiseFulfilledResult<{ sido: string; sigungu: string; dong: string; uv: number }> => r.status === 'fulfilled')
+    .map(r => r.value);
+}
+
+export async function Get_UV_Nearby(req: Request, res: Response) {
+  const { areaNo, radius } = req.query;
+  if (!areaNo) {
+    return res.status(400).json({ error: 'areaNo는 필수입니다.' });
+  }
+  const results = await getUvIndexNearby(String(areaNo), Number(radius) || 20);
+  if (!results) {
+    return res.status(404).json({ error: '해당 areaNo를 찾을 수 없습니다.' });
+  }
+  return res.json(results);
+}
+
+export async function getUvIndexNearby(areaNo: string, radiusKm: number): Promise<{ sido: string; sigungu: string; dong: string; areaNo: string; distance: number; uv: number }[] | null> {
+  const center = mappingData.find(r => r.areaNo === areaNo);
+  if (!center) return null;
+
+  const nearby = mappingData
+    .map(r => ({ ...r, distance: distanceKm(center.lat, center.lon, r.lat, r.lon) }))
+    .filter(r => r.distance <= radiusKm)
+    .sort((a, b) => a.distance - b.distance);
+
+  const time = getBaseTime(new Date());
+
+  const settled = await Promise.allSettled(
+    nearby.map(async r => {
+      const { data } = await axios.get(BASE_URL, {
+        params: { serviceKey: process.env.WEATHER_API_KEY!, numOfRows: 10, pageNo: 1, dataType: 'JSON', areaNo: r.areaNo, time },
+      });
+      const items = data?.response?.body?.items?.item;
+      if (!items) throw new Error('데이터 없음');
+      return {
+        sido: r.sido,
+        sigungu: r.sigungu,
+        dong: r.dong,
+        areaNo: r.areaNo,
+        distance: Math.round(r.distance * 10) / 10,
+        uv: findNearestUVIndex(items),
+      };
+    })
+  );
+
+  return settled
+    .filter((r): r is PromiseFulfilledResult<{ sido: string; sigungu: string; dong: string; areaNo: string; distance: number; uv: number }> => r.status === 'fulfilled')
     .map(r => r.value);
 }
