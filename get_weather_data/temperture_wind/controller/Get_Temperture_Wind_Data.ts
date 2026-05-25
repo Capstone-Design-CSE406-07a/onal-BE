@@ -1,8 +1,9 @@
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 import { Request, Response } from 'express';
 import { getBaseTime } from '../utils/getBaseTime';
 import { convertLatLngToNxNy } from '../utils/convertLatLngToNxNy';
 import { mappingData } from '../../Kma_Area_mapping';
+import { distanceKm } from '../../utils/distanceKm';
 
 interface WeatherItem {
   category: string;
@@ -18,10 +19,6 @@ interface WeatherResult {
   강수형태: string;
 }
 
-interface WeatherResponse {
-  result: WeatherResult;
-  raw: AxiosResponse;
-}
 
 const CATEGORY_MAP: Record<string, { name: keyof WeatherResult; unit: string }> = {
   T1H: { name: '기온',        unit: '°C' },
@@ -35,7 +32,7 @@ const CATEGORY_MAP: Record<string, { name: keyof WeatherResult; unit: string }> 
 
 const a1 = 37.2636
 const a2 = 127.0286
-export async function Get_Temperture_Wind_Data(req: Request, res: Response): Promise<void> {
+export async function Get_Temperture_Wind_Data(_req: Request, res: Response): Promise<void> {
 
   const {nx , ny} = convertLatLngToNxNy(a1,a2);
   console.log(nx,ny)
@@ -99,5 +96,59 @@ export async function getWeatherNationwide(apiKey: string): Promise<(WeatherResu
       sigungu: rep.sigungu,
       dong: rep.dong,
       ...weatherMap.get(`${rep.nx},${rep.ny}`)!,
+    }));
+}
+
+export async function Get_Temperture_Wind_Nearby(req: Request, res: Response): Promise<void> {
+  const { areaNo, radius } = req.query;
+  if (!areaNo) {
+    res.status(400).json({ error: 'areaNo는 필수입니다.' });
+    return;
+  }
+  const apiKey = process.env.WEATHER_API_KEY!;
+  const results = await getWeatherNearby(String(areaNo), Number(radius) || 20, apiKey);
+  if (!results) {
+    res.status(404).json({ error: '해당 areaNo를 찾을 수 없습니다.' });
+    return;
+  }
+  res.json(results);
+}
+
+export async function getWeatherNearby(areaNo: string, radiusKm: number, apiKey: string): Promise<(WeatherResult & { sido: string; sigungu: string; dong: string; areaNo: string; distance: number })[] | null> {
+  const center = mappingData.find(r => r.areaNo === areaNo);
+  if (!center) return null;
+
+  const nearby = mappingData
+    .map(r => ({ ...r, distance: distanceKm(center.lat, center.lon, r.lat, r.lon) }))
+    .filter(r => r.distance <= radiusKm)
+    .sort((a, b) => a.distance - b.distance);
+
+  const nxNyMap = new Map<string, typeof nearby[number]>();
+  nearby.forEach(r => {
+    const key = `${r.nx},${r.ny}`;
+    if (!nxNyMap.has(key)) nxNyMap.set(key, r);
+  });
+
+  const weatherResults = await Promise.allSettled(
+    [...nxNyMap.values()].map(async r => {
+      const data = await getWeather(r.nx, r.ny, apiKey);
+      return { key: `${r.nx},${r.ny}`, data };
+    })
+  );
+
+  const weatherMap = new Map<string, WeatherResult>();
+  weatherResults
+    .filter((r): r is PromiseFulfilledResult<{ key: string; data: WeatherResult }> => r.status === 'fulfilled')
+    .forEach(r => weatherMap.set(r.value.key, r.value.data));
+
+  return nearby
+    .filter(r => weatherMap.has(`${r.nx},${r.ny}`))
+    .map(r => ({
+      sido: r.sido,
+      sigungu: r.sigungu,
+      dong: r.dong,
+      areaNo: r.areaNo,
+      distance: Math.round(r.distance * 10) / 10,
+      ...weatherMap.get(`${r.nx},${r.ny}`)!,
     }));
 }
