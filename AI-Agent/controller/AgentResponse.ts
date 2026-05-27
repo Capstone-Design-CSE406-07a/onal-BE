@@ -4,6 +4,7 @@ import User from '../../information/interface/User';
 import { getWeather } from '../../get_weather_data/temperture_wind/controller/Get_Temperture_Wind_Data';
 import { getAirQuality } from '../../get_weather_data/pm/controller/Get_Pm_Data';
 import { getUvIndexForLocation } from '../../get_weather_data/uv/controller/Get_UV_Data';
+import { getForecastForDong } from '../../get_weather_data/forecast/getForecast';
 import { mappingData } from '../../get_weather_data/Kma_Area_mapping';
 import { convertLatLngToNxNy } from '../../get_weather_data/temperture_wind/utils/convertLatLngToNxNy';
 
@@ -66,6 +67,24 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_forecast',
+      description: '특정 동의 미래 날씨 예보를 조회합니다. 6시간 이내는 초단기예보, 초과 시 단기예보(최대 72시간)를 사용합니다.',
+      parameters: {
+        type: 'object',
+        properties: {
+          dong: { type: 'string', description: '조회할 동 이름 (예: 역삼동)' },
+          target_hour: {
+            type: 'number',
+            description: '지금으로부터 몇 시간 후인지 (예: 3 → 3시간 후, 24 → 내일 이 시간)',
+          },
+        },
+        required: ['dong', 'target_hour'],
+      },
+    },
+  },
 ];
 
 // dong 이름으로 매핑 데이터 조회
@@ -78,7 +97,7 @@ function resolveLocation(dong: string) {
 }
 
 // 도구 실행
-async function executeTool(name: string, args: Record<string, string>, googleId: string) {
+async function executeTool(name: string, args: Record<string, any>, googleId: string) {
   const apiKey = process.env.WEATHER_API_KEY!;
 
   if (name === 'get_weather') {
@@ -103,21 +122,24 @@ async function executeTool(name: string, args: Record<string, string>, googleId:
     return { favorite_places: user?.favorite_place ?? [] };
   }
 
+  if (name === 'get_forecast') {
+    return await getForecastForDong(args.dong, Number(args.target_hour));
+  }
+
   throw new Error(`알 수 없는 도구: ${name}`);
 }
 
 export async function AgentResponse(req: Request, res: Response): Promise<void> {
   try {
-    const { prompt, googleId: bodyGoogleId } = req.body;
+    const { prompt } = req.body;
     const sessionUser = req.user as any;
 
-    // dev only: session 없을 때 body googleId 폴백
-    const googleId = sessionUser?.googleId ?? bodyGoogleId;
-
-    if (!googleId) {
+    if (!sessionUser?.googleId) {
       res.status(401).json({ error: '로그인이 필요합니다.' });
       return;
     }
+
+    const googleId = sessionUser.googleId;
 
     if (!prompt) {
       res.status(400).json({ error: 'prompt는 필수입니다.' });
