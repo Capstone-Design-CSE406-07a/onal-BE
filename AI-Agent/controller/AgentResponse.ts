@@ -153,7 +153,13 @@ export async function AgentResponse(req: Request, res: Response): Promise<void> 
       return;
     }
 
+    const now = new Date();
+    const currentTime = now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+
     const systemPrompt = `당신은 개인 환경 건강 어시스턴트입니다. 제공된 도구를 사용해 필요한 환경 데이터를 직접 조회하고, 사용자의 건강 민감도에 맞는 행동 가이드를 제공하세요.
+
+[현재 시각]
+${currentTime}
 
 [유저 정보]
 - 이름: ${user.name}
@@ -161,7 +167,8 @@ export async function AgentResponse(req: Request, res: Response): Promise<void> 
 - 주요 활동 시간대: ${user.activity_time.map((a) => `${a.type} ${a.time}`).join(', ')}
 - 즐겨찾는 장소: ${user.favorite_place.map((p) => `${p.name}(${p.dong})`).join(', ')}
 
-도구를 적극적으로 활용하여 정확한 데이터 기반의 답변을 제공하세요. 여러 장소를 비교해야 할 때는 각 장소별로 도구를 호출하세요.`;
+도구를 적극적으로 활용하여 정확한 데이터 기반의 답변을 제공하세요. 여러 장소를 비교해야 할 때는 각 장소별로 도구를 호출하세요.
+"오늘 저녁 6시", "내일 오전 10시" 같은 절대 시각 표현은 현재 시각을 기준으로 target_hour를 직접 계산하여 get_forecast를 호출하세요.`;
 
     // 대화 이력 불러오기
     const history = await ConversationHistory.findOne({ googleId });
