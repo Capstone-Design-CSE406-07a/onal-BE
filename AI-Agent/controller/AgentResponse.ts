@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import OpenAI from 'openai';
 import User from '../../information/interface/User';
+import ConversationHistory from '../model/ConversationHistory';
 import { getWeather } from '../../get_weather_data/temperture_wind/controller/Get_Temperture_Wind_Data';
 import { getAirQuality } from '../../get_weather_data/pm/controller/Get_Pm_Data';
 import { getUvIndexForLocation } from '../../get_weather_data/uv/controller/Get_UV_Data';
@@ -10,6 +11,7 @@ import { convertLatLngToNxNy } from '../../get_weather_data/temperture_wind/util
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const MAX_ITERATIONS = 5;
+const MAX_HISTORY = 20; // 최근 20개 메시지(10회 대화) 유지
 
 // 도구 정의
 const tools: OpenAI.Chat.ChatCompletionTool[] = [
@@ -151,7 +153,13 @@ export async function AgentResponse(req: Request, res: Response): Promise<void> 
       return;
     }
 
+    const now = new Date();
+    const currentTime = now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+
     const systemPrompt = `당신은 개인 환경 건강 어시스턴트입니다. 제공된 도구를 사용해 필요한 환경 데이터를 직접 조회하고, 사용자의 건강 민감도에 맞는 행동 가이드를 제공하세요.
+
+[현재 시각]
+${currentTime}
 
 [유저 정보]
 - 이름: ${user.name}
@@ -159,10 +167,17 @@ export async function AgentResponse(req: Request, res: Response): Promise<void> 
 - 주요 활동 시간대: ${user.activity_time.map((a) => `${a.type} ${a.time}`).join(', ')}
 - 즐겨찾는 장소: ${user.favorite_place.map((p) => `${p.name}(${p.dong})`).join(', ')}
 
-도구를 적극적으로 활용하여 정확한 데이터 기반의 답변을 제공하세요. 여러 장소를 비교해야 할 때는 각 장소별로 도구를 호출하세요.`;
+도구를 적극적으로 활용하여 정확한 데이터 기반의 답변을 제공하세요. 여러 장소를 비교해야 할 때는 각 장소별로 도구를 호출하세요.
+"오늘 저녁 6시", "내일 오전 10시" 같은 절대 시각 표현은 현재 시각을 기준으로 target_hour를 직접 계산하여 get_forecast를 호출하세요.`;
+
+    // 대화 이력 불러오기
+    const history = await ConversationHistory.findOne({ googleId });
+    const pastMessages: OpenAI.Chat.ChatCompletionMessageParam[] =
+      (history?.messages ?? []).map((m) => ({ role: m.role, content: m.content }));
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
+      ...pastMessages,
       { role: 'user', content: String(prompt) },
     ];
 
@@ -177,9 +192,23 @@ export async function AgentResponse(req: Request, res: Response): Promise<void> 
       const message = response.choices[0].message;
       messages.push(message);
 
-      // 도구 호출 없이 텍스트 응답 → 최종 답변
+      // 도구 호출 없이 텍스트 응답 → 최종 답변, 이력 저장
       if (!message.tool_calls || message.tool_calls.length === 0) {
-        res.json({ answer: message.content });
+        const answer = message.content ?? '';
+
+        const newMessages = [
+          ...(history?.messages ?? []),
+          { role: 'user' as const, content: String(prompt), createdAt: new Date() },
+          { role: 'assistant' as const, content: answer, createdAt: new Date() },
+        ].slice(-MAX_HISTORY); // 최근 MAX_HISTORY개만 유지
+
+        await ConversationHistory.findOneAndUpdate(
+          { googleId },
+          { messages: newMessages },
+          { upsert: true, new: true },
+        );
+
+        res.json({ answer });
         return;
       }
 
@@ -217,5 +246,19 @@ export async function AgentResponse(req: Request, res: Response): Promise<void> 
   } catch (error: any) {
     console.error('Agent 응답 오류:', error?.response?.data ?? error?.message ?? error);
     res.status(500).json({ error: 'AI 에이전트 응답 중 오류가 발생했습니다.' });
+  }
+}
+
+export async function ClearHistory(req: Request, res: Response): Promise<void> {
+  try {
+    const sessionUser = req.user as any;
+    if (!sessionUser?.googleId) {
+      res.status(401).json({ error: '로그인이 필요합니다.' });
+      return;
+    }
+    await ConversationHistory.deleteOne({ googleId: sessionUser.googleId });
+    res.json({ message: '대화 이력이 초기화되었습니다.' });
+  } catch (error: any) {
+    res.status(500).json({ error: '이력 초기화 중 오류가 발생했습니다.' });
   }
 }
