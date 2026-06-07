@@ -2,49 +2,53 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import User from '../information/interface/User';
 
-// Passport에 구글 전략을 등록하는 코드
 passport.use(
   new GoogleStrategy(
     {
-      clientID: process.env.GOOGLE_CLIENT_ID!, // .env에 저장하세요
+      clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       callbackURL: 'http://localhost:3000/oauth/google/callback',
     },
     (accessToken, refreshToken, profile, done) => {
       (async () => {
         try {
-          // 1. 구글 ID로 이미 가입된 회원인지 확인
-          let user = await User.findOne({ googleId: profile.id });
-          // 2. 가입된 회원이 없으면 새로 생성
+          const user = await User.findOne({ googleId: profile.id });
           if (!user) {
-            return done(null, false, { message: 'USER_NOT_FOUND' })
+            // 미가입 유저도 profile을 넘겨 세션을 생성 (onboarding에서 req.user 사용 가능)
+            return done(null, profile as any, { message: 'USER_NOT_FOUND' });
           }
-          // 3. 찾았거나 생성한 사용자 정보를 done으로 전달 (이제 세션으로 넘어감)
-          return done(null, profile , { message: 'LOGIN_SUCCESS' });
+          return done(null, profile as any, { message: 'LOGIN_SUCCESS' });
+        } catch (err) {
+          return done(err as Error, false, { message: 'LOGIN_FAILED' });
         }
-        catch (err) {
-          return done(err, false,{ message: 'LOGIN_FAILED' });
-        }
-
       })();
     }
   )
 );
 
+// 세션에 { googleId, name, email } 저장 (Google profile ID는 MongoDB ObjectId가 아님)
 passport.serializeUser((user: any, done) => {
-  done(null, user.id);
+  done(null, {
+    googleId: user.id,
+    name: user.displayName,
+    email: user.emails?.[0]?.value ?? '',
+  });
 });
 
-passport.deserializeUser(async (id: string, done) => {
+passport.deserializeUser(async (data: { googleId: string; name: string; email: string }, done) => {
   try {
-    const user = await User.findById(id);
+    const user = await User.findOne({ googleId: data.googleId });
     if (!user) {
-      return done(null, false); // 유저가 없으면 에러를 내지 말고 false 반환
+      // 아직 미가입 상태 — enroll 엔드포인트가 쓸 수 있도록 profile 형태로 반환
+      return done(null, {
+        id: data.googleId,
+        displayName: data.name,
+        emails: [{ value: data.email }],
+      } as any);
     }
     done(null, user);
   } catch (err) {
-    console.error('Deserialize 에러:', err);
-    done(err); // 에러를 넘기면 서버가 죽을 수 있으니 주의
+    done(err as Error);
   }
 });
 
