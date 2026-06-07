@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express, { Request, Response } from 'express';
+import cors from 'cors';
 import Information_Router from './information/routes';
 import Oauth_Router from'./google/routes';
 import Weather_Router from './get_weather_data/routes'
@@ -14,6 +15,7 @@ const app = express();
 const port = 3000;
 
 // 1. 미들웨어 설정
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(session({
     secret: process.env.SESSION_SECRET!, // 세션을 암호화할 키 (임의로 작성)
