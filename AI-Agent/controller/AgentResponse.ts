@@ -61,7 +61,7 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_user_favorite_places',
-      description: '사용자의 즐겨찾는 장소 목록(이름, 동, 아이콘)을 조회합니다.',
+      description: '사용자의 즐겨찾는 장소 목록(이름, 동)을 조회합니다.',
       parameters: {
         type: 'object',
         properties: {},

@@ -12,7 +12,11 @@ export const UserInfoEnroll = async (req: Request, res: Response) => {
         const name     = profile.displayName;
         const email    = profile.emails?.[0]?.value ?? '';
 
-        const { sensivity, activity_time, favorite_place } = req.body;
+        const {
+            sensivity, activity_time, favorite_place,
+            felt_temperature_0, felt_temperature_10, felt_temperature_20, felt_temperature_30,
+            water_intake, body_type, age, activity_level,
+        } = req.body;
 
         const newUser = await User.create({
             googleId,
@@ -22,6 +26,14 @@ export const UserInfoEnroll = async (req: Request, res: Response) => {
             sensivity:      sensivity      ?? [],
             activity_time:  activity_time  ?? [],
             favorite_place: favorite_place ?? [],
+            felt_temperature_0,
+            felt_temperature_10,
+            felt_temperature_20,
+            felt_temperature_30,
+            water_intake,
+            body_type,
+            age,
+            activity_level,
         });
 
         return res.status(201).json(newUser);
