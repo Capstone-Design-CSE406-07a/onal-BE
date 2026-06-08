@@ -8,9 +8,19 @@ export const UserInfoEnroll = async (req: Request, res: Response) => {
             return res.status(401).json({ message: '로그인이 필요합니다.' });
         }
 
-        const googleId = profile.id;
-        const name     = profile.displayName;
-        const email    = profile.emails?.[0]?.value ?? '';
+        const googleId = profile.id ?? profile.googleId;
+        const name     = profile.displayName ?? profile.name;
+        const email    = profile.emails?.[0]?.value ?? profile.email ?? '';
+
+        if (!googleId) {
+            return res.status(401).json({ message: '로그인이 필요합니다.' });
+        }
+
+        // 이미 가입된 유저라면 기존 데이터 반환 (멱등 처리)
+        const existingUser = await User.findOne({ googleId });
+        if (existingUser) {
+            return res.status(200).json(existingUser);
+        }
 
         const {
             sensivity, activity_time, favorite_place,
@@ -38,9 +48,6 @@ export const UserInfoEnroll = async (req: Request, res: Response) => {
 
         return res.status(201).json(newUser);
     } catch (error: any) {
-        if (error.code === 11000) {
-            return res.status(409).json({ message: '이미 가입된 계정입니다.' });
-        }
         return res.status(500).json({ message: '서버 에러' });
     }
 };

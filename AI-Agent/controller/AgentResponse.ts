@@ -11,9 +11,9 @@ import { convertLatLngToNxNy } from '../../get_weather_data/temperture_wind/util
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const MAX_ITERATIONS = 5;
-const MAX_HISTORY = 10; // 최근 10개 메시지(5회 대화) 유지
+const MAX_HISTORY = 10;          // 최근 10개 메시지(5회 대화) 유지
 const MAX_TOOL_RESULT_CHARS = 3000; // 도구 결과 최대 길이 (토큰 절감)
-const HISTORY_TTL_HOURS = 24; // 마지막 대화 후 24시간 지나면 이력 만료
+const HISTORY_TTL_HOURS = 24;    // 마지막 대화 후 24시간 지나면 이력 만료
 
 const ACTIVITY_LEVEL_LABELS: Record<number, string> = {
   1: '매우 낮음', 2: '낮음', 3: '보통', 4: '높음', 5: '매우 높음',
@@ -168,6 +168,7 @@ export async function AgentResponse(req: Request, res: Response): Promise<void> 
       res.status(400).json({ error: 'prompt는 필수입니다.' });
       return;
     }
+
     const user = await User.findOne({ googleId });
     if (!user) {
       res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
@@ -194,8 +195,8 @@ ${currentTime}
 - 건강 민감도: ${user.sensivity.length > 0 ? user.sensivity.join(', ') : '일반'}
 - 활동량: ${activityLabel}
 - 체형: ${bodyTypeLabel}${user.water_intake ? `\n- 하루 목표 수분 섭취: ${user.water_intake}ml` : ''}
-- 주요 활동 시간대: ${user.activity_time.length > 0 ? user.activity_time.map((a: any) => `${a.type} ${a.time}`).join(', ') : '없음'}
-- 즐겨찾는 장소: ${user.favorite_place.length > 0 ? user.favorite_place.map((p: any) => `${p.name}(${p.dong})`).join(', ') : '없음'}
+- 주요 활동 시간대: ${user.activity_time.length > 0 ? user.activity_time.map((a) => `${a.type} ${a.time}`).join(', ') : '없음'}
+- 즐겨찾는 장소: ${user.favorite_place.length > 0 ? user.favorite_place.map((p) => `${p.name}(${p.dong})`).join(', ') : '없음'}
 ${buildFeltTemperatureSection(user)}
 
 [행동 지침]
@@ -210,13 +211,12 @@ ${buildFeltTemperatureSection(user)}
     // 대화 이력 불러오기 (24h TTL 적용)
     const history = await ConversationHistory.findOne({ googleId });
     const isHistoryExpired =
-      history?.updatedAt &&
+      history?.updatedAt != null &&
       now.getTime() - new Date(history.updatedAt).getTime() > HISTORY_TTL_HOURS * 60 * 60 * 1000;
 
-    const pastMessages: OpenAI.Chat.ChatCompletionMessageParam[] =
-      isHistoryExpired
-        ? []
-        : (history?.messages ?? []).map((m) => ({ role: m.role, content: m.content }));
+    const pastMessages: OpenAI.Chat.ChatCompletionMessageParam[] = isHistoryExpired
+      ? []
+      : (history?.messages ?? []).map((m) => ({ role: m.role, content: m.content }));
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
@@ -256,8 +256,11 @@ ${buildFeltTemperatureSection(user)}
         return;
       }
 
-      // 도구 호출 실행 (병렬)
-      const toolCalls = message.tool_calls as OpenAI.Chat.ChatCompletionMessageToolCall[];
+      // 도구 호출 실행 (병렬) — function 타입만 처리
+      type FunctionToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } };
+      const toolCalls = (message.tool_calls ?? []).filter(
+        (tc): tc is FunctionToolCall => tc.type === 'function',
+      );
       const toolResults = await Promise.allSettled(
         toolCalls.map(async (toolCall) => {
           const args = JSON.parse(toolCall.function.arguments);
@@ -270,7 +273,6 @@ ${buildFeltTemperatureSection(user)}
         if (settled.status === 'fulfilled') {
           const { toolCall, result } = settled.value;
           let content = JSON.stringify(result);
-          // 도구 결과가 너무 길면 잘라서 토큰 절감
           if (content.length > MAX_TOOL_RESULT_CHARS) {
             content = content.slice(0, MAX_TOOL_RESULT_CHARS) + '...(truncated)';
           }
