@@ -225,11 +225,13 @@ ${buildFeltTemperatureSection(user)}
     ];
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
+      const isLastIteration = i === MAX_ITERATIONS - 1;
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages,
         tools,
-        tool_choice: 'auto',
+        // 마지막 반복에서는 도구 호출을 막아 지금까지 수집한 정보로 답변을 강제 생성
+        tool_choice: isLastIteration ? 'none' : 'auto',
       });
 
       const message = response.choices[0].message;
