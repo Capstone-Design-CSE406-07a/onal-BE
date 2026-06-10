@@ -154,7 +154,7 @@ async function executeTool(name: string, args: Record<string, any>, googleId: st
 
 export async function AgentResponse(req: Request, res: Response): Promise<void> {
   try {
-    const { prompt } = req.body;
+    const { prompt, dong } = req.body;
     const sessionUser = req.user as any;
 
     if (!sessionUser?.googleId) {
@@ -189,7 +189,7 @@ export async function AgentResponse(req: Request, res: Response): Promise<void> 
 
 [현재 시각]
 ${currentTime}
-
+${dong ? `\n[현재 위치]\n${dong}\n` : ''}
 [유저 프로필]
 - 이름: ${user.name}${user.age ? ` / ${user.age}세` : ''}
 - 건강 민감도: ${user.sensivity.length > 0 ? user.sensivity.join(', ') : '일반'}
@@ -205,6 +205,7 @@ ${buildFeltTemperatureSection(user)}
 - 활동량과 체형을 고려해 운동 강도나 외출 적합성을 판단하세요.
 - 더운 날씨나 고강도 활동 시 수분 섭취 목표량을 언급하세요.
 - 도구를 적극 활용해 정확한 데이터 기반으로 답하세요.
+- 위치 기반 도구(get_weather, get_air_quality, get_uv_index, get_forecast) 호출 시 지역(동)은 다음 우선순위로 정하세요: 1) 사용자 질문에 명시된 동 2) [현재 위치] 3) 즐겨찾는 장소. 어느 것도 없으면 사용자에게 위치를 물어보세요.
 - 여러 장소 비교 시 각 장소별로 도구를 호출하세요.
 - "오늘 저녁 6시", "내일 오전 10시" 같은 절대 시각 표현은 현재 시각 기준으로 target_hour를 계산해 get_forecast를 호출하세요.`;
 
