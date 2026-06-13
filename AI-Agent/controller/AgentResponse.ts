@@ -98,13 +98,44 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ];
 
-// dong 이름으로 매핑 데이터 조회
+// 행정구역 접미사 제거 — "영통동" → "영통", "수원시 영통구" → "영통"
+function stripAdminSuffix(name: string): string {
+  return name.replace(/(특별시|광역시|특별자치시|특별자치도|도|시|구|군|읍|면|동|리|가|로)$/, '');
+}
+
+// dong 이름으로 매핑 데이터 조회 (동 → 구 → 어간 순서로 폴백)
 function resolveLocation(dong: string) {
-  const match = mappingData.find(
+  // 1. 동 이름 직접/부분 매칭
+  const byDong = mappingData.find(
     (r) => r.dong === dong || r.dong.includes(dong) || dong.includes(r.dong),
   );
-  if (!match) throw new Error(`동을 찾을 수 없습니다: ${dong}`);
-  return match;
+  if (byDong) return byDong;
+
+  // 2. sigungu 직접/부분 매칭
+  const byGu = mappingData.find(
+    (r) => r.sigungu === dong || r.sigungu.includes(dong) || dong.includes(r.sigungu),
+  );
+  if (byGu) return byGu;
+
+  // 3. 어간 기반 매칭 — "영통동" → stem "영통" → "영통구" stem "영통" → 매치
+  const inputStem = stripAdminSuffix(dong);
+  if (inputStem.length >= 2) {
+    const byStemDong = mappingData.find((r) => {
+      const s = stripAdminSuffix(r.dong);
+      return s.length >= 2 && (s.includes(inputStem) || inputStem.includes(s));
+    });
+    if (byStemDong) return byStemDong;
+
+    const byStemGu = mappingData.find((r) =>
+      r.sigungu.split(' ').some((part) => {
+        const s = stripAdminSuffix(part);
+        return s.length >= 2 && (s.includes(inputStem) || inputStem.includes(s));
+      }),
+    );
+    if (byStemGu) return byStemGu;
+  }
+
+  throw new Error(`동을 찾을 수 없습니다: ${dong}`);
 }
 
 function buildFeltTemperatureSection(user: any): string {
