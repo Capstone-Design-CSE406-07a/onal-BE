@@ -1,7 +1,7 @@
 # 📡 API 명세서
 
 **Base URL** `http://localhost:3000`  
-**작성일** 2026-06-04
+**작성일** 2026-06-14
 
 ---
 
@@ -9,8 +9,13 @@
 
 | # | 섹션 |
 |---|---|
+| # | 섹션 |
+|---|---|
 | 1 | [OAuth (구글 로그인)](#1--oauth) |
 | 2 | [User (회원)](#2--user) |
+| 2-1 | &nbsp;&nbsp; POST /user/enroll |
+| 2-2 | &nbsp;&nbsp; GET /user/get |
+| 2-3 | &nbsp;&nbsp; PUT /user/update |
 | 3 | [Weather — 기온/풍속](#3--weather--기온풍속) |
 | 4 | [Weather — 미세먼지](#4--weather--미세먼지) |
 | 5 | [Weather — 자외선](#5--weather--자외선) |
@@ -140,6 +145,72 @@
 
 | 상태코드 | 응답 | 원인 |
 |:---:|---|---|
+| `401` | `{ "message": "로그인이 필요합니다." }` | 세션 없음 |
+| `404` | `{ "message": "사용자를 찾을 수 없습니다." }` | DB에 유저 없음 |
+| `500` | `{ "message": "서버 에러" }` | 서버 오류 |
+
+---
+
+### `PUT /user/update`
+
+로그인된 사용자 정보를 수정합니다. 보낸 필드만 업데이트되며 나머지는 유지됩니다.
+
+- **인증** 필요 (Google OAuth 세션)
+
+**Request Body** (모든 필드 선택)
+
+```json
+{
+  "sensivity": ["천식/호흡기"],
+  "activity_time": [
+    { "type": "운동", "time": "07:00" }
+  ],
+  "favorite_place": [
+    { "name": "회사", "dong": "강남구" }
+  ],
+  "felt_temperature_0":  -3,
+  "felt_temperature_10":  7,
+  "felt_temperature_20": 18,
+  "felt_temperature_30": 28,
+  "water_intake":  2000,
+  "body_type":        2,
+  "age":             25,
+  "activity_level":   3,
+  "onboarding":    true
+}
+```
+
+**파라미터**
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `sensivity` | `string[]` | — | `일반` \| `천식/호흡기` \| `영유아동반` \| `노인` (복수 선택) |
+| `activity_time` | `object[]` | — | 활동 시간대 (최대 5개) |
+| `activity_time[].type` | `string` | ✅ | 활동 유형 (예: 운동, 출근) |
+| `activity_time[].time` | `string` | ✅ | 시각 (예: `07:00`) |
+| `favorite_place` | `object[]` | — | 즐겨찾는 장소 (최대 5개) |
+| `favorite_place[].name` | `string` | ✅ | 장소명 (예: 회사) |
+| `favorite_place[].dong` | `string` | ✅ | 동/구 이름 (예: 강남구) |
+| `felt_temperature_0` | `number` (정수) | — | 기온 0°C일 때 체감온도 |
+| `felt_temperature_10` | `number` (정수) | — | 기온 10°C일 때 체감온도 |
+| `felt_temperature_20` | `number` (정수) | — | 기온 20°C일 때 체감온도 |
+| `felt_temperature_30` | `number` (정수) | — | 기온 30°C일 때 체감온도 |
+| `water_intake` | `number` (정수) | — | 하루 물섭취량 (ml) |
+| `body_type` | `number` (정수) | — | 체형 |
+| `age` | `number` (정수) | — | 나이 |
+| `activity_level` | `number` (정수) | — | 활동량 |
+| `onboarding` | `boolean` | — | 온보딩 완료 여부 |
+
+> `googleId` / `name` / `email` 은 수정 불가 (보내도 무시됨)
+
+**Response `200`** — 업데이트된 전체 유저 객체 (`/user/enroll` 응답과 동일)
+
+**에러 응답**
+
+| 상태코드 | 응답 | 원인 |
+|:---:|---|---|
+| `400` | `{ "message": "수정할 필드가 없습니다." }` | body 비어있음 |
+| `400` | `{ "message": "..." }` | 스키마 유효성 검사 실패 (배열 5개 초과 등) |
 | `401` | `{ "message": "로그인이 필요합니다." }` | 세션 없음 |
 | `404` | `{ "message": "사용자를 찾을 수 없습니다." }` | DB에 유저 없음 |
 | `500` | `{ "message": "서버 에러" }` | 서버 오류 |
@@ -416,12 +487,16 @@ GPT-4o 에이전틱 AI 응답을 생성합니다. AI가 필요한 날씨 데이�
 **Request Body**
 
 ```json
-{ "prompt": "역삼동 오늘 저녁 6시에 운동해도 될까?" }
+{
+  "prompt": "오늘 저녁 6시에 운동해도 될까?",
+  "dong": "강남구"
+}
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|:---:|---|
 | `prompt` | `string` | ✅ | 사용자 질문 |
+| `dong` | `string` | — | 현재 위치 (시/군/구 단위 권장, 예: `강남구`, `영통구`). 없으면 AI가 즐겨찾는 장소로 폴백하거나 위치를 재질문 |
 
 **Response `200`**
 
