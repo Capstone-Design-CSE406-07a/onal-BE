@@ -25,10 +25,15 @@ export const UserInfoUpdate = async (req: Request, res: Response) => {
       return res.status(401).json({ message: '로그인이 필요합니다.' });
     }
 
+    const INT_FIELDS = new Set([
+      'felt_temperature_0', 'felt_temperature_10', 'felt_temperature_20', 'felt_temperature_30',
+      'water_intake', 'body_type', 'age', 'activity_level',
+    ]);
+
     const updates: Record<string, any> = {};
     for (const field of UPDATABLE_FIELDS) {
       if (req.body[field] !== undefined) {
-        updates[field] = req.body[field];
+        updates[field] = INT_FIELDS.has(field) ? Math.round(Number(req.body[field])) : req.body[field];
       }
     }
 
